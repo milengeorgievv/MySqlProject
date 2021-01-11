@@ -1,0 +1,226 @@
+create database hope_its_final;
+use hope_its_final;
+
+create table users(
+id INT AUTO_INCREMENT PRIMARY KEY,
+name VARCHAR(20),
+password VARCHAR(20)
+);
+
+create table champions(
+id INT AUTO_INCREMENT PRIMARY KEY,
+health INT,
+attack INT,
+magical_points INT,
+kills INT,
+type_champ enum('fighter', 'mage'),
+bonus_power INT,
+user_id INT,
+FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+);
+
+create table all_missions(
+id INT AUTO_INCREMENT,
+text VARCHAR (500),
+target_count INT,
+reward INT,
+PRIMARY KEY (id,text,target_count,reward)
+);
+
+create table completed_missions(
+id INT AUTO_INCREMENT PRIMARY KEY,
+text VARCHAR (500),
+target_count INT,
+reward INT,
+champion_id INT,
+all_missions_id INT,
+FOREIGN KEY (champion_id) REFERENCES champions(id) ON DELETE CASCADE,
+FOREIGN KEY (all_missions_id,text,target_count,reward) REFERENCES all_missions(id,text,target_count,reward) ON DELETE CASCADE
+);
+
+create table all_monsters(
+id INT AUTO_INCREMENT,
+health INT,
+attack INT,
+magical_points INT,
+type_monster enum('zombie','troll','gnome'),
+primary key (id,health,attack,magical_points,type_monster)
+);
+
+create table killed_monsters(
+id INT AUTO_INCREMENT PRIMARY KEY,
+health INT,
+attack INT,
+magical_points INT,
+type_monster enum('zombie','troll','gnome'),
+champion_id INT, 
+all_monsters_id INT,
+FOREIGN KEY (champion_id) REFERENCES champions(id) ON DELETE CASCADE,
+FOREIGN KEY (all_monsters_id,health,attack,magical_points,type_monster) REFERENCES all_monsters(id,health, attack, magical_points, type_monster) ON DELETE CASCADE
+);
+
+insert into users (name, password) values ('gamer', 'gamePass'), ('captain', 'capPass'), ('rex', 'rexPass');
+
+insert into champions (health, attack, magical_points, kills, type_champ,bonus_power,user_id) values 
+(50,40,0,0,'fighter',0,1),
+(40,50,30,2,'mage',10,1),
+(50,40,60,3,'fighter',15,2),
+(40,50,0,0,'mage',0,2),
+(50,40,100,4,'fighter',20,3),
+(50,40,150,5,'mage',25,3);
+
+insert into all_monsters (health, attack, magical_points, type_monster) values
+(10,10,10,'zombie'),
+(10,10,10,'troll'),
+(10,10,10,'gnome'),
+(20,20,20,'zombie'),
+(20,20,20,'troll'),
+(20,20,20,'gnome'),
+(30,30,30,'zombie'),
+(30,30,30,'troll'),
+(30,30,30,'gnome'),
+(40,40,40,'zombie'),
+(40,40,40,'troll'),
+(50,50,50,'gnome'),
+(60,60,60,'troll'),
+(50,50,50,'zombie'),
+(70,70,70,'gnome'); 
+
+insert into killed_monsters (health, attack, magical_points, type_monster, champion_id,all_monsters_id) values
+(10,10,10,'zombie',2,1),
+(10,10,10,'troll',3,2),
+(10,10,10,'gnome',5,3),
+(10,10,10,'troll',6,2),
+(20,20,20,'zombie',2,4),
+(20,20,20,'troll',5,5),
+(20,20,20,'gnome',3,6),
+(20,20,20,'gnome',6,6),
+(30,30,30,'zombie',5,7),
+(30,30,30,'zombie',3,7),
+(30,30,30,'gnome',6,9),
+(40,40,40,'zombie',6,10),
+(40,40,40,'troll',5,11),
+(50,50,50,'gnome',6,12);
+
+insert into all_missions (text,target_count,reward) values 
+('Kill 1 monster',1,10),
+('Kill 2 monsters',2,20),
+('Kill 3 monsters',3,30),
+('Kill 4 monsters',4,40),
+('Kill 5 monsters',5,20),
+('Kill 10 monsters',10,50),
+('Kill 20 monsters',20,200);
+
+insert into completed_missions (text,target_count, reward, champion_id, all_missions_id) values
+('Kill 1 monster',1,10,2,1),
+('Kill 1 monster',1,10,3,1),
+('Kill 1 monster',1,10,6,1),
+('Kill 1 monster',1,10,5,1),
+('Kill 2 monsters',2,20,2,2),
+('Kill 2 monsters',2,20,3,2),
+('Kill 2 monsters',2,20,5,2),
+('Kill 2 monsters',2,20,6,2),
+('Kill 3 monsters',3,30,3,3),
+('Kill 3 monsters',3,30,5,3),
+('Kill 3 monsters',3,30,6,3),
+('Kill 4 monsters',4,40,5,4),
+('Kill 4 monsters',4,40,6,4),
+('Kill 5 monsters',5,20,6,5);
+
+select * from users;
+select * from champions;
+select * from all_missions;
+select * from completed_missions;
+select * from all_monsters;
+select * from killed_monsters;
+
+
+-- 2ra
+select health,attack,magical_points,type_monster 
+from all_monsters 
+where magical_points>=30 && type_monster!='troll';
+
+-- 3ta 
+select text,target_count, reward, COUNT(champion_id) AS times_finished 
+from completed_missions
+where reward>=20
+group by reward;
+
+-- 4ta
+select * from users
+inner join champions on users.id=champions.user_id
+where magical_points>50
+order by magical_points desc;
+
+select champions.id,type_champ,user_id,text,target_count,reward from champions
+join completed_missions on champions.id=completed_missions.champion_id
+where user_id>2
+order by reward desc;
+
+-- 5ta
+select champions.id,champions.type_champ,
+ champions.magical_points as champ_points,
+ round(avg(killed_monsters.magical_points),2) as avg_monster_points, 
+ count(champions.id) as kills from champions
+join killed_monsters on champions.id=killed_monsters.champion_id
+group by champions.id
+order by champ_points desc;
+
+
+DROP PROCEDURE IF EXISTS  Kill_monster;
+delimiter $
+CREATE PROCEDURE Kill_monster(IN championID INT, IN monsterID INT)
+BEGIN
+DECLARE done INT;
+DECLARE champ_health INT;
+DECLARE champ_attack INT;
+DECLARE champ_power INT;
+DECLARE killCursor CURSOR FOR
+select health,attack,bonus_power
+from champions
+where id=championID;
+DECLARE CONTINUE HANDLER FOR NOT FOUND SET done = 1;
+SET done = 0;
+OPEN killCursor;
+mission_loop: WHILE(done = 0)
+DO
+FETCH killCursor INTO champ_health,champ_attack, champ_power;
+       IF(done = 1)
+       THEN 
+       LEAVE mission_loop;
+       END IF;	
+       
+       IF(champ_health+champ_attack+champ_power>(Select sum(attack+health) from all_monsters where id=monsterID)) THEN
+			-- pobeda
+			UPDATE champions set kills=kills+1 where id=championID;
+            INSERT INTO killed_monsters (health,attack,magical_points,type_monster,all_monsters_id, champion_id) VALUES 
+            ((SELECT health from all_monsters where id=monsterID),
+            (SELECT  attack from all_monsters where id=monsterID),
+            (SELECT magical_points from all_monsters where id=monsterID),
+            (SELECT type_monster from all_monsters where id=monsterID),
+            (SELECT id from all_monsters where id=monsterID),
+            championID);
+            IF(SELECT id FROM all_missions where target_count=(SELECT kills from champions where id=championID)) THEN
+				-- izpulnena misiq
+				INSERT INTO completed_missions (text, target_count,reward,all_missions_id,champion_id) VALUES
+                ((SELECT text FROM all_missions where target_count=(SELECT kills from champions where id=championID)),
+                (SELECT target_count FROM all_missions where target_count=(SELECT kills from champions where id=championID)),
+                (SELECT reward FROM all_missions where target_count=(SELECT kills from champions where id=championID)),
+                (SELECT id FROM all_missions where target_count=(SELECT kills from champions where id=championID)),
+                championID);
+            END IF;
+            SELECT 'Geroqt specheli bitkata!' as result;
+       ELSE
+       -- zaguba
+			UPDATE champions set magical_points=0,kills=0,bonus_power=0 where id=championID;
+            SELECT 'Geroqt zagubi bitkata! :(' as result;
+       END IF;
+END WHILE;
+CLOSE killCursor;
+SET done = 0;
+END;
+$
+delimiter ;
+
+call Kill_monster(1,5);
+
